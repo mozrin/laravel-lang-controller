@@ -1,7 +1,3 @@
-rewrite This is a a readme file for the Language Controller.pghp file ... that in general does this ... (explain it)
-Sure, here's a README file that explains the functionality of the LanguageController.php file in detail:
-
-LanguageController.php
 The LanguageController.php file is a Laravel controller designed to handle language translation requests. Its primary function is to translate given keys into specified target languages by looking up corresponding translation files.
 
 Functionality
