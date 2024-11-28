@@ -2,50 +2,71 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Lang;
+use Illuminate\Http\Request;
 
 class LanguageController extends Controller
 {
-    public function translate(Request $request)
+    /**
+     * Translate the given key to the target language.
+     *
+     * @param string $key
+     * @param string $iso639
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function translate($key, $iso639)
     {
-        $request->validate([
-            'request_key' => 'required|string',
-            'language' => 'required|string',
-            'browser' => 'boolean',
-            'fallback' => 'boolean',
-        ]);
+        // Set the target language
+        app()->setLocale($iso639);
 
-        $request_key = $request->request_key;
-        $language = $request->language;
-        $browser = $request->browser ?? true;
-        $fallback = $request->fallback ?? true;
+        // Path to the language directory (adjusted for Laravel 11)
+        $langPath = base_path('lang/' . $iso639);
 
-        // Determine the effective language
-        if ($browser && $request->hasHeader('Accept-Language')) {
-            $language = substr($request->header('Accept-Language'), 0, 2);
+        // Check if the directory exists
+        if (!File::exists($langPath)) {
+            return response()->json([
+                'message' => 'Language directory not found',
+                'target_language' => $iso639,
+                'lang_path' => $langPath // Debug: Output the path being checked
+            ], 404);
         }
 
-        App::setLocale($language);
+        $translation = null;
+        $fileFound = null;
 
-        // Attempt to get the translation
-        if (Lang::has($request_key)) {
-            $translation = __(':key', ['key' => $request_key]);
+        if (strpos($key, '.') !== false) {
+            // Key contains a dot, look in the specified file
+            $translation = Lang::get($key);
+            $fileFound = explode('.', $key, 2)[0];
         } else {
-            if ($fallback) {
-                $translation = __(':key', ['key' => $request_key], config('app.fallback_locale'));
-            } else {
-                return response()->json([
-                    'error' => __('translation-not-found'),
-                    'original_request' => $request->all()
-                ], 404);
+            // Key does not contain a dot, search all files
+            $files = File::allFiles($langPath);
+
+            foreach ($files as $file) {
+                $filePath = $file->getRealPath();
+                $fileName = $file->getFilenameWithoutExtension();
+                $translation = Lang::get($fileName . '.' . $key);
+
+                if ($translation !== $fileName . '.' . $key) {
+                    $fileFound = $fileName;
+                    break;
+                }
             }
+        }
+
+        if ($translation === null || $translation === $key || ($fileFound !== null && $translation === $fileFound . '.' . $key)) {
+            return response()->json([
+                'error' => "key '$key' not found",
+                'target_language' => $iso639,
+            ], 404);
         }
 
         return response()->json([
             'translation' => $translation,
-            'original_request' => $request->all()
-        ], 200);
+            'file' => $fileFound,
+            'key' => $key,
+            'target_language' => $iso639,
+        ]);
     }
 }
